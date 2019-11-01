@@ -9,10 +9,11 @@ use cortex_m_rt::entry;
 
 use stm32_usbd::UsbBus;
 
-use stm32f1xx_hal::{prelude::*, stm32, timer::Timer};
+// use embedded_hal::digital::v2::{InputPin, OutputPin};
+use stm32f1xx_hal::{prelude::*, stm32};
 use usb_device::prelude::*;
 
-const USB_CLASS_AUDIO: u8 = 0x01;
+// const USB_CLASS_AUDIO: u8 = 0x01;
 
 mod midi {
     use usb_device::class_prelude::*;
@@ -107,94 +108,14 @@ impl Position {
         match (a, b) {
             (true, false) => Position::Left,
             (false, true) => Position::Right,
-            (true, true) => Position::Mid,
-            _ => panic!("invalid reading"),
+            _ => Position::Mid,
+            // (true, true) => Position::Mid,
+            // _ => panic!("invalid reading"),
         }
     }
 }
 
-// #[entry]
-// fn main() -> ! {
-//     let cp = cortex_m::Peripherals::take().unwrap();
-//     let dp = stm32::Peripherals::take().unwrap();
-
-//     let mut flash = dp.FLASH.constrain();
-//     let mut rcc = dp.RCC.constrain();
-
-//     let clocks = rcc
-//         .cfgr
-//         .use_hse(8.mhz())
-//         .sysclk(48.mhz())
-//         .pclk1(24.mhz())
-//         .freeze(&mut flash.acr);
-
-//     assert!(clocks.usbclk_valid(), "usb clocks not valid");
-
-//     let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
-//     let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
-
-//     let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-
-//     // fader
-//     let in_a = gpioc.pc14.into_floating_input(&mut gpioc.crh);
-//     let in_b = gpioc.pc15.into_floating_input(&mut gpioc.crh);
-
-//     let usb_bus =
-//         UsbBus::usb_with_reset(dp.USB, &mut rcc.apb1, &clocks, &mut gpioa.crh, gpioa.pa12);
-
-//     let mut midi = midi::MidiClass::new(&usb_bus);
-
-//     let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x27de))
-//         .manufacturer("Per Lindgren")
-//         .product("RTFM Fader")
-//         .serial_number("v0.0")
-//         .device_class(USB_CLASS_AUDIO)
-//         .build();
-
-//     usb_dev.force_reset().expect("reset failed");
-
-//     let mut timer = Timer::syst(cp.SYST, 1000.hz(), clocks);
-
-//     // hprintln!("start").unwrap();
-//     let mut pos: Position = Position::new(in_a.is_high(), in_b.is_high());
-//     //  hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
-//     midi.control_msg(0, 5, pos.to_val()).ok();
-
-//     let mut a = Position::Left;
-//     loop {
-//         while usb_dev.poll(&mut [&mut midi]) {}
-
-//         if usb_dev.state() == UsbDeviceState::Configured {
-//             // let new_pos = Position::new(in_a.is_high(), in_b.is_high());
-
-//             // just toggle position
-//             let new_pos = match pos {
-//                 Position::Left => Position::Mid,
-//                 _ => Position::Left,
-//             };
-//             if new_pos != pos {
-//                 pos = new_pos;
-
-//                 match pos {
-//                     Position::Mid => led.set_low(),
-//                     _ => led.set_high(),
-//                 }
-
-//                 hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
-//                 midi.control_msg(0, 5, pos.to_val()).ok();
-//             }
-//             // block!(timer.wait()).unwrap();
-//         }
-//     }
-// }
-
-// use cortex_m::asm::delay;
-// use cortex_m_rt::entry;
-// use stm32_usbd::UsbBus;
-// use stm32f1xx_hal::{prelude::*, stm32};
-// use usb_device::prelude::*;
-use cortex_m::{iprintln, Peripherals};
-use usbd_serial::{SerialPort, USB_CLASS_CDC};
+use cortex_m::iprintln;
 
 #[entry]
 fn main() -> ! {
@@ -224,7 +145,7 @@ fn main() -> ! {
     // Configure the on-board LED (PC13, green)
     let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
     let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-    led.set_high(); // Turn off
+    led.set_high().ok(); // Turn off
 
     // fader
     let in_a = gpioc.pc14.into_floating_input(&mut gpioc.crh);
@@ -236,7 +157,7 @@ fn main() -> ! {
     // Pull the D+ pin down to send a RESET condition to the USB bus.
     // 1/100 seconds = 10ms.qåcq
     let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
-    usb_dp.set_low();
+    usb_dp.set_low().ok();
     iprintln!(stim, "sysclk {}", clocks.sysclk().0);
     //delay(clocks.sysclk().0 / 100);
     delay(clocks.sysclk().0 / 10);
@@ -253,16 +174,15 @@ fn main() -> ! {
         .manufacturer("Per Lindgren")
         .product("Fader")
         .serial_number("v0.1")
-        //.device_class(USB_CLASS_AUDIO)
+        // .device_class(USB_CLASS_AUDIO)
         .build();
 
     iprintln!(stim, "start");
 
-    let mut pos: Position = Position::new(in_a.is_high(), in_b.is_high());
+    let mut pos: Position = Position::new(in_a.is_high().unwrap(), in_b.is_high().unwrap());
     // hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
     // midi.control_msg(0, 5, pos.to_val()).ok();
 
-    let mut a = Position::Left;
     loop {
         while usb_dev.poll(&mut [&mut midi]) {}
 
@@ -278,9 +198,9 @@ fn main() -> ! {
                 pos = new_pos;
 
                 match pos {
-                    Position::Mid => led.set_low(),
-                    _ => led.set_high(),
-                }
+                    Position::Mid => led.set_low().ok(),
+                    _ => led.set_high().ok(),
+                };
 
                 iprintln!(stim, "pos: {:?}, val {:?}", pos, pos.to_val());
                 midi.control_msg(0, 5, pos.to_val()).ok();
@@ -288,6 +208,7 @@ fn main() -> ! {
         // block!(timer.wait()).unwrap();
         } else {
             iprintln!(stim, "not configured");
+            delay(clocks.sysclk().0 / 1000);
         }
     }
 }
