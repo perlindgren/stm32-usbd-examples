@@ -95,3 +95,23 @@ Tracing needs to be fast, thus semihosting may be a no go. Instead we can setup 
 > mkfifo /tmp/itm.fifo
 > itmdump -f /tmp/itm.fifo -F
 ```
+
+## USB Tracing
+
+### Linux (arch)
+
+- wireshark 
+
+``` shell
+> sudo gpasswd -a $USER wireshark
+> sudo modprobe usbmon
+```
+
+https://project.altservice.com/journals/diff/3831?detail_id=5687
+
+### OSX
+
+``` shell
+ifconfig XHC20 up
+```
+

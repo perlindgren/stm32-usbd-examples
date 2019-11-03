@@ -113,87 +113,7 @@ impl Position {
     }
 }
 
-// #[entry]
-// fn main() -> ! {
-//     let cp = cortex_m::Peripherals::take().unwrap();
-//     let dp = stm32::Peripherals::take().unwrap();
-
-//     let mut flash = dp.FLASH.constrain();
-//     let mut rcc = dp.RCC.constrain();
-
-//     let clocks = rcc
-//         .cfgr
-//         .use_hse(8.mhz())
-//         .sysclk(48.mhz())
-//         .pclk1(24.mhz())
-//         .freeze(&mut flash.acr);
-
-//     assert!(clocks.usbclk_valid(), "usb clocks not valid");
-
-//     let mut gpioa = dp.GPIOA.split(&mut rcc.apb2);
-//     let mut gpioc = dp.GPIOC.split(&mut rcc.apb2);
-
-//     let mut led = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
-
-//     // fader
-//     let in_a = gpioc.pc14.into_floating_input(&mut gpioc.crh);
-//     let in_b = gpioc.pc15.into_floating_input(&mut gpioc.crh);
-
-//     let usb_bus =
-//         UsbBus::usb_with_reset(dp.USB, &mut rcc.apb1, &clocks, &mut gpioa.crh, gpioa.pa12);
-
-//     let mut midi = midi::MidiClass::new(&usb_bus);
-
-//     let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x27de))
-//         .manufacturer("Per Lindgren")
-//         .product("RTFM Fader")
-//         .serial_number("v0.0")
-//         .device_class(USB_CLASS_AUDIO)
-//         .build();
-
-//     usb_dev.force_reset().expect("reset failed");
-
-//     let mut timer = Timer::syst(cp.SYST, 1000.hz(), clocks);
-
-//     // hprintln!("start").unwrap();
-//     let mut pos: Position = Position::new(in_a.is_high(), in_b.is_high());
-//     //  hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
-//     midi.control_msg(0, 5, pos.to_val()).ok();
-
-//     let mut a = Position::Left;
-//     loop {
-//         while usb_dev.poll(&mut [&mut midi]) {}
-
-//         if usb_dev.state() == UsbDeviceState::Configured {
-//             // let new_pos = Position::new(in_a.is_high(), in_b.is_high());
-
-//             // just toggle position
-//             let new_pos = match pos {
-//                 Position::Left => Position::Mid,
-//                 _ => Position::Left,
-//             };
-//             if new_pos != pos {
-//                 pos = new_pos;
-
-//                 match pos {
-//                     Position::Mid => led.set_low(),
-//                     _ => led.set_high(),
-//                 }
-
-//                 hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
-//                 midi.control_msg(0, 5, pos.to_val()).ok();
-//             }
-//             // block!(timer.wait()).unwrap();
-//         }
-//     }
-// }
-
-// use cortex_m::asm::delay;
-// use cortex_m_rt::entry;
-// use stm32_usbd::UsbBus;
-// use stm32f1xx_hal::{prelude::*, stm32};
-// use usb_device::prelude::*;
-use cortex_m::{iprintln, Peripherals};
+use cortex_m::{iprint, iprintln, Peripherals};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 #[entry]
@@ -253,7 +173,7 @@ fn main() -> ! {
         .manufacturer("Per Lindgren")
         .product("Fader")
         .serial_number("v0.1")
-        //.device_class(USB_CLASS_AUDIO)
+        // .device_class(USB_CLASS_AUDIO)
         .build();
 
     iprintln!(stim, "start");
@@ -262,7 +182,7 @@ fn main() -> ! {
     // hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
     // midi.control_msg(0, 5, pos.to_val()).ok();
 
-    let mut a = Position::Left;
+    let mut cntr = 0;
     loop {
         while usb_dev.poll(&mut [&mut midi]) {}
 
@@ -270,24 +190,32 @@ fn main() -> ! {
             // let new_pos = Position::new(in_a.is_high(), in_b.is_high());
 
             // just toggle position
-            let new_pos = match pos {
-                Position::Left => Position::Mid,
-                _ => Position::Left,
-            };
-            if new_pos != pos {
-                pos = new_pos;
+            if cntr == 100000 {
+                cntr = 0;
+                let new_pos = match pos {
+                    Position::Left => Position::Mid,
+                    _ => Position::Left,
+                };
+                if new_pos != pos {
+                    pos = new_pos;
 
-                match pos {
-                    Position::Mid => led.set_low(),
-                    _ => led.set_high(),
+                    match pos {
+                        Position::Mid => led.set_low(),
+                        _ => led.set_high(),
+                    }
+
+                    //iprintln!(stim, "pos: {:?}, val {:?}", pos, pos.to_val());
+                    iprint!(stim, "+");
+                    midi.control_msg(0, 5, pos.to_val()).ok();
                 }
-
-                iprintln!(stim, "pos: {:?}, val {:?}", pos, pos.to_val());
-                midi.control_msg(0, 5, pos.to_val()).ok();
+            } else {
+                cntr += 1;
             }
+
         // block!(timer.wait()).unwrap();
         } else {
-            iprintln!(stim, "not configured");
+            iprint!(stim, "-");
+            // delay(clocks.sysclk().0 / 100);
         }
     }
 }
