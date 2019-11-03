@@ -83,6 +83,13 @@ mod midi {
 
             Ok(())
         }
+
+        fn endpoint_out(&mut self, ep: EndpointAddress) {
+            if ep == self.out_ep.address() {
+                let mut dummy = [0u8; 64];
+                self.out_ep.read(&mut dummy).ok();
+            }
+        }
     }
 }
 
