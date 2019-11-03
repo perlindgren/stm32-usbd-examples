@@ -11,6 +11,15 @@
                 "$rustc"
             ],
             "group": "build"
+        },
+        {
+            "type": "shell",
+            "label": "cargo build --example midi --release --features=\"itm-trace\"",
+            "command": "cargo build --example midi --release --features=\"itm-trace\"",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
         }
     ]
 }

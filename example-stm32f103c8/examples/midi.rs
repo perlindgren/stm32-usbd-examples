@@ -12,7 +12,7 @@ use stm32_usbd::UsbBus;
 use stm32f1xx_hal::{prelude::*, stm32, timer::Timer};
 use usb_device::prelude::*;
 
-const USB_CLASS_AUDIO: u8 = 0x01;
+// const USB_CLASS_AUDIO: u8 = 0x01;
 
 mod midi {
     use usb_device::class_prelude::*;
@@ -120,7 +120,25 @@ impl Position {
     }
 }
 
-use cortex_m::{iprint, iprintln, Peripherals};
+use cortex_m::Peripherals;
+#[cfg(feature = "itm-trace")]
+use cortex_m::{iprint, iprintln};
+#[cfg(not(feature = "itm-trace"))]
+mod itm_stub {
+    #[macro_export]
+    macro_rules! iprint {
+        ($channel:expr, $s:expr) => {};
+        ($channel:expr, $($arg:tt)*) => {};
+    }
+
+    /// Macro for sending a formatted string through an ITM channel, with a newline.
+    #[macro_export]
+    macro_rules! iprintln {
+        ($channel:expr) => {};
+        ($channel:expr, $fmt:expr) => {};
+        ($channel:expr, $fmt:expr, $($arg:tt)*) => {};
+    }
+}
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 #[entry]
@@ -141,6 +159,36 @@ fn main() -> ! {
 
     // Itm trace
     let mut cp = cortex_m::Peripherals::take().unwrap();
+    // unsafe {
+    //     // enable TPIU and ITM
+    //     cp.DCB.demcr.modify(|r| r | (1 << 24));
+
+    //     // prescaler
+    //     let swo_freq = 2_000_000;
+    //     cp.TPIU.acpr.write((clocks.sysclk().0 / swo_freq) - 1);
+
+    //     // SWO NRZ
+    //     cp.TPIU.sppr.write(2);
+
+    //     cp.TPIU.ffcr.modify(|r| r & !(1 << 1));
+
+    //     // STM32 specific: enable tracing in the DBGMCU_CR register
+    //     const DBGMCU_CR: *mut u32 = 0xe0042004 as *mut u32;
+    //     let r = core::ptr::read_volatile(DBGMCU_CR);
+    //     core::ptr::write_volatile(DBGMCU_CR, r | (1 << 5));
+
+    //     // unlock the ITM
+    //     cp.ITM.lar.write(0xC5ACCE55);
+
+    //     cp.ITM.tcr.write(
+    //         (0b000001 << 16) | // TraceBusID
+    //         (1 << 3) | // enable SWO output
+    //         (1 << 0), // enable the ITM
+    //     );
+
+    //     // enable stimulus port 0
+    //     cp.ITM.ter[0].write(1);
+    // }
     let stim = &mut cp.ITM.stim[0];
 
     iprintln!(stim, "Reset, ITM tracing started");
@@ -166,7 +214,7 @@ fn main() -> ! {
     usb_dp.set_low();
     iprintln!(stim, "sysclk {}", clocks.sysclk().0);
     //delay(clocks.sysclk().0 / 100);
-    delay(clocks.sysclk().0 / 10);
+    delay(clocks.sysclk().0 / 5);
     iprintln!(stim, "release low");
 
     let usb_dm = gpioa.pa11;
@@ -176,53 +224,39 @@ fn main() -> ! {
 
     let mut midi = midi::MidiClass::new(&usb_bus);
 
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x27dd))
-        .manufacturer("Per Lindgren")
+    // https://github.com/obdev/v-usb/blob/master/usbdrv/USB-IDs-for-free.txt
+
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x05e4, 0x16c0))
+        .manufacturer("Per.Lindgren@ltu.se")
         .product("Fader")
         .serial_number("v0.1")
-        // .device_class(USB_CLASS_AUDIO)
         .build();
 
     iprintln!(stim, "start");
 
     let mut pos: Position = Position::new(in_a.is_high(), in_b.is_high());
-    // hprintln!("pos: {:?}, val {:?}", pos, pos.to_val()).unwrap();
-    // midi.control_msg(0, 5, pos.to_val()).ok();
-
-    let mut cntr = 0;
+    let mut init = true;
     loop {
-        while usb_dev.poll(&mut [&mut midi]) {}
+        usb_dev.poll(&mut [&mut midi]);
 
         if usb_dev.state() == UsbDeviceState::Configured {
-            // let new_pos = Position::new(in_a.is_high(), in_b.is_high());
+            let new_pos = Position::new(in_a.is_high(), in_b.is_high());
 
-            // just toggle position
-            if cntr == 100000 {
-                cntr = 0;
-                let new_pos = match pos {
-                    Position::Left => Position::Mid,
-                    _ => Position::Left,
-                };
-                if new_pos != pos {
-                    pos = new_pos;
+            if init || (new_pos != pos) {
+                pos = new_pos;
+                init = false;
 
-                    match pos {
-                        Position::Mid => led.set_low(),
-                        _ => led.set_high(),
-                    }
-
-                    //iprintln!(stim, "pos: {:?}, val {:?}", pos, pos.to_val());
-                    iprint!(stim, "+");
-                    midi.control_msg(0, 5, pos.to_val()).ok();
+                match pos {
+                    Position::Mid => led.set_low(),
+                    _ => led.set_high(),
                 }
-            } else {
-                cntr += 1;
-            }
 
-        // block!(timer.wait()).unwrap();
+                iprintln!(stim, "pos: {:?}, val {:?}", pos, pos.to_val());
+                midi.control_msg(0, 5, pos.to_val()).ok();
+            }
         } else {
             iprint!(stim, "-");
-            // delay(clocks.sysclk().0 / 100);
+            // delay(clocks.sysclk().0 / 10);
         }
     }
 }
